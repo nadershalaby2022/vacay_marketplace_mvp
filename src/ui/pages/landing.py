@@ -28,5 +28,6 @@ def render():
         goto("home")
 
     st.markdown("---")
-    st.caption("ملاحظة: OTP وإعلانات VIP هنضيفهم بعدين.")
+    st.caption("للأعلان عن عقارك مجانا اتصل.")
+    st.caption("01016675600")
     footer()
