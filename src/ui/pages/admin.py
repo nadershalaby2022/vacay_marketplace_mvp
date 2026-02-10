@@ -26,7 +26,7 @@ def _admin_gate() -> bool:
     st.info("🔐 دخول الأدمن")
     pwd = st.text_input("Admin Password", type="password")
     if st.button("دخول"):
-        real = st.secrets.get("admin", {}).get("password", "admin123")
+        real = st.secrets.get("admin", {}).get("password", "ToqaNader2026")
         if pwd == real:
             st.session_state["admin_authed"] = True
             st.success("تم الدخول ✅")
