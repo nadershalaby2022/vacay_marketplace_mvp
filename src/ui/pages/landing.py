@@ -4,7 +4,7 @@ from ..router import goto
 
 def render():
     # Landing: لا نعرض زر "خروج" هنا
-    st.markdown("### 🏖️ Vacay Marketplace MVP")
+    st.markdown("### 🏖️ شقق مصيفية وعقارات مرسى مطروح")
     st.write("أول مرة دخول — (مبدئي) بالاسم + رقم الهاتف. بدون OTP الآن.")
 
     with st.form("guest_login"):
