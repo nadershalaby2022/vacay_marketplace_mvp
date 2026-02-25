@@ -5,7 +5,7 @@ from src.db.seed import seed_if_empty
 from src.ui.router import current_page, goto
 from src.ui.pages import landing, home, unit_details, admin
 
-st.set_page_config(page_title="Vacay Marketplace MVP", layout="wide")
+st.set_page_config(page_title="دليل مطروح السياحى", layout="wide")
 
 
 def ensure_defaults():

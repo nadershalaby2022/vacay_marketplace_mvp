@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import date
 from typing import Any, Optional
 
 from .database import get_conn
@@ -11,74 +12,71 @@ def _next_unit_id(conn) -> str:
     row = conn.execute("SELECT unit_id FROM units ORDER BY unit_id DESC LIMIT 1").fetchone()
     if not row:
         return "SH-0001"
-    last = row["unit_id"]  # e.g. SH-0012
     try:
-        n = int(str(last).split("-")[1])
+        n = int(str(row["unit_id"]).split("-")[1])
     except Exception:
         n = 0
     return f"SH-{n+1:04d}"
 
 
-# =========================
-# Units
-# =========================
+def _unit_days(booked_from: str, booked_to: str) -> int:
+    try:
+        d1 = date.fromisoformat((booked_from or "").strip())
+        d2 = date.fromisoformat((booked_to or "").strip())
+        return (d2 - d1).days + 1 if d2 >= d1 else 0
+    except Exception:
+        return 0
+
+
+def _hydrate_unit(row) -> dict[str, Any]:
+    d = dict(row)
+    d["photo_urls"] = json.loads(d.get("photo_urls_json") or "[]")
+    d["booked_days"] = _unit_days(d.get("booked_from", ""), d.get("booked_to", ""))
+    return d
+
+
 def list_units(active_only: bool = True) -> list[dict[str, Any]]:
     q = "SELECT * FROM units"
-    params: tuple[Any, ...] = ()
     if active_only:
         q += " WHERE is_active=1"
     q += " ORDER BY unit_id ASC"
-
     with get_conn() as conn:
-        rows = conn.execute(q, params).fetchall()
-        data: list[dict[str, Any]] = []
-        for r in rows:
-            d = dict(r)
-            d["photo_urls"] = json.loads(d.get("photo_urls_json") or "[]")
-            data.append(d)
-        return data
+        return [_hydrate_unit(r) for r in conn.execute(q).fetchall()]
 
 
 def get_unit(unit_id: str) -> Optional[dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM units WHERE unit_id=?", (unit_id,)).fetchone()
-        if not row:
-            return None
-        d = dict(row)
-        d["photo_urls"] = json.loads(d.get("photo_urls_json") or "[]")
-        return d
+        return _hydrate_unit(row) if row else None
 
 
 def create_unit(payload: dict[str, Any]) -> str:
-    """
-    payload keys:
-      title, location, rooms, description, youtube_url, cover_image_url,
-      photo_urls(list), available_from, price_day, price_week, is_active(int/bool)
-    """
     with get_conn() as conn:
         unit_id = _next_unit_id(conn)
-
-        photo_urls = payload.get("photo_urls") or []
-        photo_urls_json = json.dumps(photo_urls, ensure_ascii=False)
-
+        photo_urls_json = json.dumps(payload.get("photo_urls") or [], ensure_ascii=False)
         conn.execute(
             """
             INSERT INTO units(
-              unit_id, title, location, rooms, description, youtube_url, cover_image_url, photo_urls_json,
-              available_from, price_day, price_week, is_active, updated_at
+              unit_id, title, property_type, location, rooms, description, youtube_url, cover_image_url,
+              photo_urls_json, contact_whatsapp, contact_phone, available_from, available_to,
+              price_day, price_week, is_active, updated_at
             )
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
             """,
             (
                 unit_id,
                 payload.get("title", "").strip(),
+                payload.get("property_type", "شقة").strip() or "شقة",
                 payload.get("location", "").strip(),
                 int(payload.get("rooms") or 0),
                 payload.get("description", "").strip(),
                 payload.get("youtube_url", "").strip(),
                 payload.get("cover_image_url", "").strip(),
                 photo_urls_json,
+                payload.get("contact_whatsapp", "").strip(),
+                payload.get("contact_phone", "").strip(),
                 payload.get("available_from", "").strip(),
+                payload.get("available_to", "").strip(),
                 payload.get("price_day", "").strip(),
                 payload.get("price_week", "").strip(),
                 1 if payload.get("is_active", True) else 0,
@@ -88,36 +86,31 @@ def create_unit(payload: dict[str, Any]) -> str:
 
 
 def update_unit(unit_id: str, payload: dict[str, Any]) -> None:
-    photo_urls = payload.get("photo_urls") or []
-    photo_urls_json = json.dumps(photo_urls, ensure_ascii=False)
-
+    photo_urls_json = json.dumps(payload.get("photo_urls") or [], ensure_ascii=False)
     with get_conn() as conn:
         conn.execute(
             """
             UPDATE units SET
-              title=?,
-              location=?,
-              rooms=?,
-              description=?,
-              youtube_url=?,
-              cover_image_url=?,
-              photo_urls_json=?,
-              available_from=?,
-              price_day=?,
-              price_week=?,
-              is_active=?,
-              updated_at=datetime('now')
+              title=?, property_type=?, location=?, rooms=?, description=?,
+              youtube_url=?, cover_image_url=?, photo_urls_json=?,
+              contact_whatsapp=?, contact_phone=?,
+              available_from=?, available_to=?, price_day=?, price_week=?,
+              is_active=?, updated_at=datetime('now')
             WHERE unit_id=?
             """,
             (
                 payload.get("title", "").strip(),
+                payload.get("property_type", "شقة").strip() or "شقة",
                 payload.get("location", "").strip(),
                 int(payload.get("rooms") or 0),
                 payload.get("description", "").strip(),
                 payload.get("youtube_url", "").strip(),
                 payload.get("cover_image_url", "").strip(),
                 photo_urls_json,
+                payload.get("contact_whatsapp", "").strip(),
+                payload.get("contact_phone", "").strip(),
                 payload.get("available_from", "").strip(),
+                payload.get("available_to", "").strip(),
                 payload.get("price_day", "").strip(),
                 payload.get("price_week", "").strip(),
                 1 if payload.get("is_active", True) else 0,
@@ -126,13 +119,39 @@ def update_unit(unit_id: str, payload: dict[str, Any]) -> None:
         )
 
 
-# =========================
-# Leads
-# =========================
+def set_unit_booking_status(
+    *,
+    unit_id: str,
+    is_booked: bool,
+    booked_from: str = "",
+    booked_to: str = "",
+    booking_note_text: str = "",
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE units
+            SET is_booked=?,
+                booked_from=?,
+                booked_to=?,
+                booking_note_text=?,
+                updated_at=datetime('now')
+            WHERE unit_id=?
+            """,
+            (
+                1 if is_booked else 0,
+                booked_from.strip() if is_booked else "",
+                booked_to.strip() if is_booked else "",
+                booking_note_text.strip() if is_booked else "",
+                unit_id,
+            ),
+        )
+
+
 def create_lead(
     *,
     unit_id: str,
-    action: str,  # whatsapp / call / booking
+    action: str,
     guest_name: str,
     guest_phone: str,
     guest_residence: str,
@@ -142,7 +161,6 @@ def create_lead(
 ) -> str:
     lead_id = str(uuid.uuid4())
     meta_json = json.dumps(meta or {}, ensure_ascii=False)
-
     with get_conn() as conn:
         conn.execute(
             """
@@ -167,16 +185,191 @@ def create_lead(
     return lead_id
 
 
-def list_leads(limit: int = 200) -> list[dict[str, Any]]:
+def list_leads(limit: int = 300) -> list[dict[str, Any]]:
     with get_conn() as conn:
         rows = conn.execute(
             """
             SELECT lead_id, created_at, unit_id, action, duration_text, note,
                    guest_name, guest_phone, guest_residence
             FROM leads
-            ORDER BY created_at DESC
+            ORDER BY datetime(created_at) DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def delete_all_leads() -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM leads")
+
+
+def delete_leads_by_guest(guest_key: str) -> int:
+    v = (guest_key or "").strip()
+    if not v:
+        return 0
+    with get_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM leads WHERE guest_name=? OR guest_phone=?",
+            (v, v),
+        )
+        return int(cur.rowcount or 0)
+
+
+def create_booking_request(
+    *,
+    unit_id: str,
+    guest_name: str,
+    guest_phone: str,
+    guest_residence: str,
+    duration_text: str = "",
+    note: str = "",
+) -> str:
+    booking_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO bookings(
+              booking_id, unit_id, guest_name, guest_phone, guest_residence, duration_text, note
+            )
+            VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                booking_id,
+                unit_id,
+                (guest_name or "").strip(),
+                (guest_phone or "").strip(),
+                (guest_residence or "").strip(),
+                (duration_text or "").strip(),
+                (note or "").strip(),
+            ),
+        )
+    return booking_id
+
+
+def count_new_booking_requests() -> int:
+    with get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM bookings WHERE is_new_admin=1").fetchone()
+        return int(row["c"] if row else 0)
+
+
+def list_bookings(limit: int = 1000) -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT booking_id, created_at, unit_id, guest_name, guest_phone, guest_residence,
+                   duration_text, note, status, is_new_admin, booked_from, booked_to,
+                   admin_schedule_text, reviewed_at
+            FROM bookings
+            ORDER BY datetime(created_at) DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        data = [dict(r) for r in rows]
+        for d in data:
+            d["booked_days"] = _unit_days(d.get("booked_from", ""), d.get("booked_to", ""))
+        return data
+
+
+def review_booking(
+    *,
+    booking_id: str,
+    status: str,
+    booked_from: str = "",
+    booked_to: str = "",
+    admin_schedule_text: str = "",
+) -> None:
+    clean_status = status if status in {"confirmed", "rejected"} else "rejected"
+    with get_conn() as conn:
+        row = conn.execute("SELECT unit_id FROM bookings WHERE booking_id=?", (booking_id,)).fetchone()
+        if not row:
+            return
+        unit_id = row["unit_id"]
+
+        conn.execute(
+            """
+            UPDATE bookings
+            SET status=?, is_new_admin=0, booked_from=?, booked_to=?,
+                admin_schedule_text=?, reviewed_at=datetime('now')
+            WHERE booking_id=?
+            """,
+            (clean_status, booked_from.strip(), booked_to.strip(), admin_schedule_text.strip(), booking_id),
+        )
+
+    if clean_status == "confirmed":
+        set_unit_booking_status(
+            unit_id=unit_id,
+            is_booked=True,
+            booked_from=booked_from,
+            booked_to=booked_to,
+            booking_note_text=admin_schedule_text,
+        )
+
+
+def add_sponsor_media(*, slot: str, media_kind: str, url: str, title: str = "") -> str:
+    media_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) AS m FROM sponsor_media WHERE slot=?",
+            (slot,),
+        ).fetchone()
+        next_sort = int(row["m"] if row else 0) + 1
+        conn.execute(
+            """
+            INSERT INTO sponsor_media(media_id, slot, media_kind, title, url, is_active, sort_order)
+            VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                media_id,
+                (slot or "gallery").strip(),
+                (media_kind or "image").strip(),
+                (title or "").strip(),
+                (url or "").strip(),
+                1,
+                next_sort,
+            ),
+        )
+    return media_id
+
+
+def update_sponsor_media(
+    media_id: str,
+    *,
+    slot: str,
+    media_kind: str,
+    url: str,
+    title: str = "",
+    is_active: bool = True,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE sponsor_media
+            SET slot=?, media_kind=?, title=?, url=?, is_active=?
+            WHERE media_id=?
+            """,
+            (
+                (slot or "gallery").strip(),
+                (media_kind or "image").strip(),
+                (title or "").strip(),
+                (url or "").strip(),
+                1 if is_active else 0,
+                media_id,
+            ),
+        )
+
+
+def list_sponsor_media(active_only: bool = True) -> list[dict[str, Any]]:
+    q = "SELECT * FROM sponsor_media"
+    if active_only:
+        q += " WHERE is_active=1"
+    q += " ORDER BY slot ASC, sort_order ASC, datetime(created_at) ASC"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def delete_sponsor_media(media_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sponsor_media WHERE media_id=?", (media_id,))
