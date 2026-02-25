@@ -1,2 +1,2 @@
 # pages package
-from . import landing, home, unit_details, admin
+from . import landing, home, unit_details, admin, matrouh_guide

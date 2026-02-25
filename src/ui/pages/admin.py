@@ -16,9 +16,17 @@ from ...db.repository import (
     list_leads,
     list_sponsor_media,
     list_units,
+    list_guide_categories,
+    list_guide_items,
     review_booking,
     set_unit_booking_status,
     update_sponsor_media,
+    create_guide_category,
+    update_guide_category,
+    delete_guide_category,
+    create_guide_item,
+    update_guide_item,
+    delete_guide_item,
     update_unit,
 )
 
@@ -125,7 +133,7 @@ def render():
     _play_bell_once(new_count)
 
     st.markdown("## لوحة الأدمن - إدارة العقارات والحجوزات والإعلانات")
-    tabs = st.tabs(["إضافة عقار", "تعديل عقار", "كل العقارات", "الحجوزات", "إعلانات السبونسر", "Leads"])
+    tabs = st.tabs(["إضافة عقار", "تعديل عقار", "كل العقارات", "الحجوزات", "إعلانات السبونسر", "دليل مطروح", "Leads"])
 
     with tabs[0]:
         with st.form("add_unit"):
@@ -361,6 +369,140 @@ def render():
             st.info("لا توجد وسائط حالياً.")
 
     with tabs[5]:
+        st.markdown("### إدارة دليل مطروح")
+
+        categories = list_guide_categories(active_only=False)
+        items = list_guide_items(active_only=False)
+        st.write(f"عدد الأقسام: {len(categories)} | عدد العناصر: {len(items)}")
+
+        with st.container(border=True):
+            st.markdown("#### إضافة قسم جديد")
+            new_cat_name = st.text_input("اسم القسم", key="guide_new_cat_name")
+            new_cat_active = st.checkbox("القسم نشط", value=True, key="guide_new_cat_active")
+            if st.button("إضافة القسم", key="guide_add_cat_btn"):
+                if not new_cat_name.strip():
+                    st.error("من فضلك اكتب اسم القسم.")
+                else:
+                    create_guide_category(new_cat_name, is_active=new_cat_active)
+                    st.success("تمت إضافة القسم.")
+                    st.rerun()
+
+        if categories:
+            with st.container(border=True):
+                st.markdown("#### تعديل/حذف قسم")
+                cat_id = st.selectbox(
+                    "اختر القسم",
+                    options=[c["category_id"] for c in categories],
+                    format_func=lambda cid: next((c["name"] for c in categories if c["category_id"] == cid), cid),
+                    key="guide_edit_cat_id",
+                )
+                current_cat = next((c for c in categories if c["category_id"] == cat_id), None)
+                if current_cat:
+                    cat_name = st.text_input("اسم القسم", value=current_cat.get("name", ""), key="guide_edit_cat_name")
+                    cat_active = st.checkbox("القسم نشط", value=bool(int(current_cat.get("is_active", 1))), key="guide_edit_cat_active")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("حفظ تعديل القسم", key="guide_update_cat_btn", use_container_width=True):
+                            if not cat_name.strip():
+                                st.error("اسم القسم مطلوب.")
+                            else:
+                                update_guide_category(cat_id, cat_name, is_active=cat_active)
+                                st.success("تم تعديل القسم.")
+                                st.rerun()
+                    with c2:
+                        if st.button("حذف القسم نهائيًا", key="guide_delete_cat_btn", use_container_width=True):
+                            delete_guide_category(cat_id)
+                            st.warning("تم حذف القسم وكل عناصره.")
+                            st.rerun()
+
+        with st.container(border=True):
+            st.markdown("#### إضافة عنصر جديد داخل قسم")
+            active_categories = [c for c in categories if int(c.get("is_active", 1)) == 1]
+            if not active_categories:
+                st.info("أضف قسمًا نشطًا أولاً.")
+            else:
+                add_item_cat = st.selectbox(
+                    "القسم",
+                    options=[c["category_id"] for c in active_categories],
+                    format_func=lambda cid: next((c["name"] for c in active_categories if c["category_id"] == cid), cid),
+                    key="guide_add_item_cat",
+                )
+                add_item_name = st.text_input("اسم العنصر", key="guide_add_item_name")
+                add_item_desc = st.text_area("وصف", key="guide_add_item_desc")
+                add_item_loc = st.text_input("الموقع", key="guide_add_item_loc")
+                add_item_img = st.text_input("لينك الصورة", key="guide_add_item_img")
+                add_item_active = st.checkbox("العنصر نشط", value=True, key="guide_add_item_active")
+                if st.button("إضافة العنصر", key="guide_add_item_btn"):
+                    if not add_item_name.strip():
+                        st.error("اسم العنصر مطلوب.")
+                    else:
+                        create_guide_item(
+                            category_id=add_item_cat,
+                            name=add_item_name,
+                            description=add_item_desc,
+                            location=add_item_loc,
+                            image_url=add_item_img,
+                            is_active=add_item_active,
+                        )
+                        st.success("تمت إضافة العنصر.")
+                        st.rerun()
+
+        if items:
+            with st.container(border=True):
+                st.markdown("#### تعديل/حذف عنصر")
+                item_id = st.selectbox(
+                    "اختر العنصر",
+                    options=[i["item_id"] for i in items],
+                    format_func=lambda iid: next((f"{it['name']} - {it.get('category_name','')}" for it in items if it["item_id"] == iid), iid),
+                    key="guide_edit_item_id",
+                )
+                current_item = next((i for i in items if i["item_id"] == item_id), None)
+                if current_item and categories:
+                    edit_item_cat = st.selectbox(
+                        "القسم",
+                        options=[c["category_id"] for c in categories],
+                        index=[c["category_id"] for c in categories].index(current_item["category_id"]) if current_item["category_id"] in [c["category_id"] for c in categories] else 0,
+                        format_func=lambda cid: next((c["name"] for c in categories if c["category_id"] == cid), cid),
+                        key="guide_edit_item_cat",
+                    )
+                    edit_item_name = st.text_input("اسم العنصر", value=current_item.get("name", ""), key="guide_edit_item_name")
+                    edit_item_desc = st.text_area("وصف", value=current_item.get("description", ""), key="guide_edit_item_desc")
+                    edit_item_loc = st.text_input("الموقع", value=current_item.get("location", ""), key="guide_edit_item_loc")
+                    edit_item_img = st.text_input("لينك الصورة", value=current_item.get("image_url", ""), key="guide_edit_item_img")
+                    edit_item_active = st.checkbox("العنصر نشط", value=bool(int(current_item.get("is_active", 1))), key="guide_edit_item_active")
+
+                    e1, e2 = st.columns(2)
+                    with e1:
+                        if st.button("حفظ تعديل العنصر", key="guide_update_item_btn", use_container_width=True):
+                            if not edit_item_name.strip():
+                                st.error("اسم العنصر مطلوب.")
+                            else:
+                                update_guide_item(
+                                    item_id,
+                                    category_id=edit_item_cat,
+                                    name=edit_item_name,
+                                    description=edit_item_desc,
+                                    location=edit_item_loc,
+                                    image_url=edit_item_img,
+                                    is_active=edit_item_active,
+                                )
+                                st.success("تم تعديل العنصر.")
+                                st.rerun()
+                    with e2:
+                        if st.button("حذف العنصر نهائيًا", key="guide_delete_item_btn", use_container_width=True):
+                            delete_guide_item(item_id)
+                            st.warning("تم حذف العنصر.")
+                            st.rerun()
+
+        st.markdown("---")
+        if categories:
+            st.markdown("#### جدول الأقسام")
+            st.dataframe(categories, use_container_width=True)
+        if items:
+            st.markdown("#### جدول عناصر الدليل")
+            st.dataframe(items, use_container_width=True)
+
+    with tabs[6]:
         leads = list_leads(limit=500)
         st.write(f"عدد الـ Leads: {len(leads)}")
         l1, l2 = st.columns(2)

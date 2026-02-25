@@ -6,6 +6,7 @@ PAGES = {
     "home": "Home",
     "unit": "Unit Details",
     "admin": "Admin",
+    "guide": "Matrouh Guide",
 }
 
 def goto(page: str, unit_id: Optional[str] = None) -> None:

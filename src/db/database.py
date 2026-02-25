@@ -80,6 +80,25 @@ def init_db() -> None:
         is_active INTEGER NOT NULL DEFAULT 1,
         sort_order INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS guide_categories (
+        category_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        name TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS guide_items (
+        item_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        category_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        location TEXT NOT NULL DEFAULT '',
+        image_url TEXT NOT NULL DEFAULT '',
+        is_active INTEGER NOT NULL DEFAULT 1
+    );
     """
     with get_conn() as conn:
         conn.executescript(ddl)
@@ -108,3 +127,7 @@ def _migrate_units_table(conn: sqlite3.Connection) -> None:
     booking_cols = {r["name"] for r in conn.execute("PRAGMA table_info(bookings)").fetchall()}
     if booking_cols and "reviewed_at" not in booking_cols:
         conn.execute("ALTER TABLE bookings ADD COLUMN reviewed_at TEXT NOT NULL DEFAULT ''")
+
+    category_cols = {r["name"] for r in conn.execute("PRAGMA table_info(guide_categories)").fetchall()}
+    if category_cols and "sort_order" not in category_cols:
+        conn.execute("ALTER TABLE guide_categories ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")

@@ -373,3 +373,118 @@ def list_sponsor_media(active_only: bool = True) -> list[dict[str, Any]]:
 def delete_sponsor_media(media_id: str) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM sponsor_media WHERE media_id=?", (media_id,))
+
+
+def list_guide_categories(active_only: bool = True) -> list[dict[str, Any]]:
+    q = "SELECT category_id, created_at, name, is_active, sort_order FROM guide_categories"
+    if active_only:
+        q += " WHERE is_active=1"
+    q += " ORDER BY sort_order ASC, datetime(created_at) ASC"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def create_guide_category(name: str, is_active: bool = True) -> str:
+    category_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        row = conn.execute("SELECT COALESCE(MAX(sort_order), 0) AS m FROM guide_categories").fetchone()
+        next_sort = int(row["m"] if row else 0) + 1
+        conn.execute(
+            """
+            INSERT INTO guide_categories(category_id, name, is_active, sort_order)
+            VALUES(?,?,?,?)
+            """,
+            (category_id, (name or "").strip(), 1 if is_active else 0, next_sort),
+        )
+    return category_id
+
+
+def update_guide_category(category_id: str, name: str, is_active: bool = True) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE guide_categories SET name=?, is_active=? WHERE category_id=?",
+            ((name or "").strip(), 1 if is_active else 0, category_id),
+        )
+
+
+def delete_guide_category(category_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM guide_items WHERE category_id=?", (category_id,))
+        conn.execute("DELETE FROM guide_categories WHERE category_id=?", (category_id,))
+
+
+def list_guide_items(active_only: bool = True) -> list[dict[str, Any]]:
+    q = """
+    SELECT i.item_id, i.created_at, i.category_id, c.name AS category_name,
+           i.name, i.description, i.location, i.image_url, i.is_active
+    FROM guide_items i
+    LEFT JOIN guide_categories c ON c.category_id = i.category_id
+    """
+    if active_only:
+        q += " WHERE i.is_active=1 AND c.is_active=1"
+    q += " ORDER BY c.sort_order ASC, c.name ASC, datetime(i.created_at) ASC"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def create_guide_item(
+    *,
+    category_id: str,
+    name: str,
+    description: str = "",
+    location: str = "",
+    image_url: str = "",
+    is_active: bool = True,
+) -> str:
+    item_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO guide_items(item_id, category_id, name, description, location, image_url, is_active)
+            VALUES(?,?,?,?,?,?,?)
+            """,
+            (
+                item_id,
+                (category_id or "").strip(),
+                (name or "").strip(),
+                (description or "").strip(),
+                (location or "").strip(),
+                (image_url or "").strip(),
+                1 if is_active else 0,
+            ),
+        )
+    return item_id
+
+
+def update_guide_item(
+    item_id: str,
+    *,
+    category_id: str,
+    name: str,
+    description: str = "",
+    location: str = "",
+    image_url: str = "",
+    is_active: bool = True,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE guide_items
+            SET category_id=?, name=?, description=?, location=?, image_url=?, is_active=?
+            WHERE item_id=?
+            """,
+            (
+                (category_id or "").strip(),
+                (name or "").strip(),
+                (description or "").strip(),
+                (location or "").strip(),
+                (image_url or "").strip(),
+                1 if is_active else 0,
+                item_id,
+            ),
+        )
+
+
+def delete_guide_item(item_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM guide_items WHERE item_id=?", (item_id,))

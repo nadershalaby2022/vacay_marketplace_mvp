@@ -10,12 +10,15 @@ def apply_theme() -> None:
 
 def header():
     apply_theme()
-    left, mid, right, admin_col = st.columns([2.3, 1, 1, 1])
+    left, home_col, guide_col, right, admin_col = st.columns([2.3, 1, 1, 1, 1])
     with left:
-        st.markdown("### Dalil Matrouh")
-    with mid:
+        st.markdown("### دليل مطروح السياحي")
+    with home_col:
         if st.button("Home", use_container_width=True):
             goto("home")
+    with guide_col:
+        if st.button("Guide", use_container_width=True):
+            goto("guide")
     with right:
         if st.button("Logout", use_container_width=True):
             st.session_state.clear()
@@ -27,4 +30,4 @@ def header():
 
 def footer():
     st.markdown("---")
-    st.caption("Dalil Matrouh")
+    st.caption("دليل مطروح السياحي")

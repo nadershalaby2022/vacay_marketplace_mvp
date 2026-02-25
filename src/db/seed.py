@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 
 from .database import get_conn
-from .repository import add_sponsor_media, create_unit
+from .repository import add_sponsor_media, create_unit, create_guide_category, create_guide_item
 
 
 def seed_if_empty() -> None:
     _seed_units_if_empty()
     _seed_sponsors_if_empty()
+    _seed_guide_if_empty()
     _backfill_missing_media_links()
 
 
@@ -157,3 +158,43 @@ def _backfill_missing_media_links() -> None:
                 """,
                 (cover, json.dumps(photos, ensure_ascii=False), video, available_to, unit_id),
             )
+
+
+def _seed_guide_if_empty() -> None:
+    with get_conn() as conn:
+        c = conn.execute("SELECT COUNT(*) AS c FROM guide_categories").fetchone()["c"]
+    if c and int(c) > 0:
+        return
+
+    beaches_id = create_guide_category("شواطئ", is_active=True)
+    food_id = create_guide_category("مطاعم وكافيهات", is_active=True)
+    services_id = create_guide_category("خدمات", is_active=True)
+
+    create_guide_item(
+        category_id=beaches_id,
+        name="شاطئ عجيبة",
+        description="شاطئ جميل بمياه صافية وإطلالة مميزة.",
+        location="مرسى مطروح",
+        image_url="https://picsum.photos/seed/guide-ajiba/1200/800",
+    )
+    create_guide_item(
+        category_id=beaches_id,
+        name="شاطئ كليوباترا",
+        description="شاطئ معروف ومناسب للزيارة الصباحية.",
+        location="مرسى مطروح",
+        image_url="https://picsum.photos/seed/guide-cleo/1200/800",
+    )
+    create_guide_item(
+        category_id=food_id,
+        name="مطعم أسماك",
+        description="مأكولات بحرية طازجة.",
+        location="الكورنيش",
+        image_url="https://picsum.photos/seed/guide-fish/1200/800",
+    )
+    create_guide_item(
+        category_id=services_id,
+        name="صيدلية 24 ساعة",
+        description="خدمة يومية للطوارئ.",
+        location="وسط مطروح",
+        image_url="https://picsum.photos/seed/guide-ph/1200/800",
+    )
